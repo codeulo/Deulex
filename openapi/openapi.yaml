@@ -1,0 +1,858 @@
+openapi: 3.1.0
+info:
+  title: FireTrade Mobile Application API
+  version: 1.0.0
+  description: |
+    MVP Backend API for FireTrade - A Crypto Exchange and Bill Payment Service
+    supporting NGN fiat pairs and digital bill payments in Nigeria.
+  contact:
+    name: FireTrade API Support
+    email: api@firetrade.ng
+
+servers:
+  - url: http://localhost:3002/api/v1/
+    description: Production server
+  - url: https://staging-api.firetrade.ng/api/v1
+    description: Staging server
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase JWT token obtained from authentication endpoints
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          example: "Invalid request parameters"
+        details:
+          type: object
+          additionalProperties: true
+
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - phone
+        - full_name
+      properties:
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        password:
+          type: string
+          format: password
+          minLength: 8
+          example: "SecurePass123!"
+        phone:
+          type: string
+          pattern: '^\+234[0-9]{10}$'
+          example: "+2348012345678"
+        full_name:
+          type: string
+          minLength: 3
+          example: "John Doe"
+
+    RegisterResponse:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        email:
+          type: string
+          example: "user@example.com"
+        requires_2fa_setup:
+          type: boolean
+          example: true
+        qr_code_url:
+          type: string
+          example: "otpauth://totp/FireTrade:user@example.com?secret=..."
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        password:
+          type: string
+          format: password
+          example: "SecurePass123!"
+
+    LoginResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refresh_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        requires_2fa:
+          type: boolean
+          example: true
+        expires_in:
+          type: integer
+          example: 3600
+
+    TwoFAVerifyRequest:
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          type: string
+          pattern: "^[0-9]{6}$"
+          example: "123456"
+
+    TwoFAVerifyResponse:
+      type: object
+      properties:
+        verified:
+          type: boolean
+          example: true
+        access_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+    FiatWallet:
+      type: object
+      properties:
+        wallet_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        user_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        currency:
+          type: string
+          enum: [NGN, USD]
+          example: "NGN"
+        balance:
+          type: string
+          pattern: '^\d+\.\d{4}$'
+          example: "150000.0000"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CryptoWallet:
+      type: object
+      properties:
+        wallet_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440002"
+        user_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        asset_id:
+          type: string
+          format: uuid
+          example: "650e8400-e29b-41d4-a716-446655440003"
+        asset_ticker:
+          type: string
+          example: "BTC"
+        balance:
+          type: string
+          pattern: '^\d+\.\d{10}$'
+          example: "0.0500000000"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    DepositFiatRequest:
+      type: object
+      required:
+        - amount
+        - currency
+        - payment_method
+      properties:
+        amount:
+          type: string
+          pattern: '^\d+\.\d{2}$'
+          example: "50000.00"
+        currency:
+          type: string
+          enum: [NGN]
+          example: "NGN"
+        payment_method:
+          type: string
+          enum: [bank_transfer, card, ussd]
+          example: "bank_transfer"
+
+    DepositFiatResponse:
+      type: object
+      properties:
+        deposit_id:
+          type: string
+          format: uuid
+          example: "750e8400-e29b-41d4-a716-446655440004"
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+          example: "pending"
+        payment_reference:
+          type: string
+          example: "FT-DEP-20250512-001234"
+        payment_instructions:
+          type: object
+          properties:
+            account_number:
+              type: string
+              example: "9876543210"
+            bank_name:
+              type: string
+              example: "Providus Bank"
+            account_name:
+              type: string
+              example: "FireTrade Limited"
+        expires_at:
+          type: string
+          format: date-time
+
+    WithdrawCryptoRequest:
+      type: object
+      required:
+        - asset_ticker
+        - amount
+        - destination_address
+        - network
+      properties:
+        asset_ticker:
+          type: string
+          example: "BTC"
+        amount:
+          type: string
+          pattern: '^\d+\.\d{1,10}$'
+          example: "0.05"
+        destination_address:
+          type: string
+          example: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+        network:
+          type: string
+          example: "bitcoin"
+        two_fa_code:
+          type: string
+          pattern: "^[0-9]{6}$"
+          example: "123456"
+
+    WithdrawCryptoResponse:
+      type: object
+      properties:
+        withdrawal_id:
+          type: string
+          format: uuid
+          example: "850e8400-e29b-41d4-a716-446655440005"
+        status:
+          type: string
+          enum: [pending_approval, processing, completed, failed, rejected]
+          example: "pending_approval"
+        estimated_fee:
+          type: string
+          example: "0.0005"
+        estimated_completion:
+          type: string
+          format: date-time
+
+    TickerData:
+      type: object
+      properties:
+        pair:
+          type: string
+          example: "BTC-NGN"
+        last_price:
+          type: string
+          example: "85000000.00"
+        bid_price:
+          type: string
+          example: "84995000.00"
+        ask_price:
+          type: string
+          example: "85005000.00"
+        volume_24h:
+          type: string
+          example: "125.5000"
+        change_24h:
+          type: string
+          example: "2.35"
+        high_24h:
+          type: string
+          example: "85500000.00"
+        low_24h:
+          type: string
+          example: "83000000.00"
+        timestamp:
+          type: string
+          format: date-time
+
+    TradeRequest:
+      type: object
+      required:
+        - pair
+        - type
+        - amount
+      properties:
+        pair:
+          type: string
+          pattern: "^[A-Z]{3,4}-[A-Z]{3}$"
+          example: "BTC-NGN"
+          description: "Trading pair in format BASE-QUOTE (e.g., BTC-NGN)"
+        type:
+          type: string
+          enum: [BUY, SELL]
+          example: "BUY"
+          description: "BUY or SELL order type"
+        amount:
+          type: string
+          pattern: '^\d+\.\d{2,10}$'
+          example: "1000000.00"
+          description: "Amount in quote currency (NGN for BTC-NGN pair)"
+
+    TradeResponse:
+      type: object
+      properties:
+        trade_id:
+          type: string
+          format: uuid
+          example: "950e8400-e29b-41d4-a716-446655440006"
+        pair:
+          type: string
+          example: "BTC-NGN"
+        type:
+          type: string
+          example: "BUY"
+        amount_base:
+          type: string
+          example: "0.0117647059"
+          description: "Amount of base currency (BTC)"
+        amount_quote:
+          type: string
+          example: "1000000.00"
+          description: "Amount of quote currency (NGN)"
+        execution_price:
+          type: string
+          example: "85000000.00"
+        fee:
+          type: string
+          example: "2500.00"
+        status:
+          type: string
+          enum: [pending, executed, failed, cancelled]
+          example: "executed"
+        executed_at:
+          type: string
+          format: date-time
+
+    BillCategory:
+      type: object
+      properties:
+        category_id:
+          type: string
+          format: uuid
+          example: "a50e8400-e29b-41d4-a716-446655440007"
+        name:
+          type: string
+          example: "Airtime"
+        description:
+          type: string
+          example: "Mobile airtime recharge"
+        providers:
+          type: array
+          items:
+            type: object
+            properties:
+              provider_id:
+                type: string
+                example: "MTN"
+              name:
+                type: string
+                example: "MTN Nigeria"
+              min_amount:
+                type: string
+                example: "50.00"
+              max_amount:
+                type: string
+                example: "50000.00"
+
+    BillPaymentRequest:
+      type: object
+      required:
+        - category_id
+        - amount
+        - fiat_wallet_id
+        - recipient_details
+      properties:
+        category_id:
+          type: string
+          format: uuid
+          example: "a50e8400-e29b-41d4-a716-446655440007"
+        amount:
+          type: string
+          pattern: '^\d+\.\d{2}$'
+          example: "5000.00"
+        fiat_wallet_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440001"
+        recipient_details:
+          type: object
+          description: "Provider-specific JSON object"
+          example:
+            provider: "MTN"
+            phone: "08012345678"
+          additionalProperties: true
+
+    BillPaymentResponse:
+      type: object
+      properties:
+        payment_id:
+          type: string
+          format: uuid
+          example: "b50e8400-e29b-41d4-a716-446655440008"
+        category:
+          type: string
+          example: "Airtime"
+        amount_ngn:
+          type: string
+          example: "5000.00"
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+          example: "completed"
+        provider_reference_id:
+          type: string
+          example: "MTN-REF-20250512-789456"
+        created_at:
+          type: string
+          format: date-time
+
+  parameters:
+    XRequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      description: Unique request identifier for idempotency (UUID v4)
+      schema:
+        type: string
+        format: uuid
+        example: "c50e8400-e29b-41d4-a716-446655440009"
+
+    TradingPair:
+      name: pair
+      in: path
+      required: true
+      description: Trading pair (e.g., BTC-NGN, ETH-NGN)
+      schema:
+        type: string
+        pattern: "^[A-Z]{3,4}-[A-Z]{3}$"
+        example: "BTC-NGN"
+
+paths:
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: Creates a new user account with mandatory KYC information
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: User successfully registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterResponse"
+        "400":
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticates user credentials and returns JWT tokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Too many login attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /auth/2fa/verify:
+    post:
+      tags:
+        - Authentication
+      summary: Verify 2FA code
+      description: Validates the 2FA TOTP code during login or setup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TwoFAVerifyRequest"
+      responses:
+        "200":
+          description: 2FA verification successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TwoFAVerifyResponse"
+        "401":
+          description: Invalid 2FA code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Too many verification attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /wallets/fiat:
+    get:
+      tags:
+        - Wallet Management
+      summary: Get all fiat wallets
+      description: Retrieves all user fiat balances (NGN, USD)
+      responses:
+        "200":
+          description: Fiat wallets retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  wallets:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FiatWallet"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /wallets/crypto:
+    get:
+      tags:
+        - Wallet Management
+      summary: Get all crypto wallets
+      description: Retrieves all held crypto balances
+      responses:
+        "200":
+          description: Crypto wallets retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  wallets:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CryptoWallet"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /wallets/deposit/fiahhht:
+    post:
+      tags:
+        - Wallet Management
+      summary: Initiate fiat deposit
+      description: Initiates NGN deposit via local payment gateway integration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DepositFiatRequest"
+      responses:
+        "201":
+          description: Deposit initiated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepositFiatResponse"
+        "400":
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /wallets/withdrawal/crypto:
+    post:
+      tags:
+        - Wallet Management
+      summary: Initiate crypto withdrawal
+      description: Initiates crypto withdrawal request (requires 2FA confirmation)
+      parameters:
+        - $ref: "#/components/parameters/XRequestID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WithdrawCryptoRequest"
+      responses:
+        "201":
+          description: Withdrawal initiated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WithdrawCryptoResponse"
+        "400":
+          description: Invalid request data or insufficient balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized or invalid 2FA code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Duplicate request (idempotency check failed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /exchange/ticker/{pair}:
+    get:
+      tags:
+        - Crypto Exchange
+      summary: Get real-time ticker data
+      description: Real-time price feed for a specific trading pair
+      parameters:
+        - $ref: "#/components/parameters/TradingPair"
+      responses:
+        "200":
+          description: Ticker data retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TickerData"
+        "404":
+          description: Trading pair not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /exchange/trade:
+    post:
+      tags:
+        - Crypto Exchange
+      summary: Place a spot market order
+      description: Executes a spot market order (BUY or SELL) with idempotency support
+      parameters:
+        - $ref: "#/components/parameters/XRequestID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TradeRequest"
+      responses:
+        "201":
+          description: Trade executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TradeResponse"
+        "400":
+          description: Invalid request data or insufficient balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Duplicate request (idempotency check failed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Trading temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /bills/categories:
+    get:
+      tags:
+        - Bill Payments
+      summary: Get bill payment categories
+      description: Retrieves available bill payment categories (Airtime, Data, etc.)
+      responses:
+        "200":
+          description: Categories retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  categories:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/BillCategory"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /bills/pay:
+    post:
+      tags:
+        - Bill Payments
+      summary: Execute bill payment
+      description: Executes a bill payment transaction with idempotency support
+      parameters:
+        - $ref: "#/components/parameters/XRequestID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BillPaymentRequest"
+      responses:
+        "201":
+          description: Bill payment successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillPaymentResponse"
+        "400":
+          description: Invalid request data or insufficient balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Duplicate request (idempotency check failed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Bill payment service temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
